@@ -1,0 +1,14 @@
+# Environments
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# Datasets (We will download the 20 Newsgroups data here later)
+data/
