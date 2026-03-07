@@ -1,48 +1,355 @@
+Below is your **entire README content in pure Markdown input format** (no extra formatting blocks), ready to paste directly into a `README.md` file in your repository.
+
+---
+
 # Trademarkia AI/ML Engineer Task: Semantic Search Cache
 
-This repository contains a lightweight, fully functional semantic search system and custom cache built from first principles using the 20 Newsgroups dataset.
+This repository contains a lightweight semantic search system with a custom semantic cache built from first principles using the **20 Newsgroups dataset**.
 
-## Setup & Installation
+The system integrates:
 
-1. **Clone the repository:** `git clone <your-repo-link>`
-2. **Create the virtual environment:** `python -m venv venv`
-3. **Activate it:** * Windows: `venv\Scripts\activate`
-   * macOS/Linux: `source venv/bin/activate`
-4. **Install dependencies:** `pip install -r requirements.txt`
-5. **Run the server:** `uvicorn main:app --reload`
-
-*Note: A `Dockerfile` is also included for containerized deployment.*
+* SentenceTransformer embeddings
+* FAISS vector similarity search
+* Gaussian Mixture Model fuzzy clustering
+* A custom semantic cache
+* FastAPI service for live API access
 
 ---
 
-## Architectural Design & Justifications
+# Project Structure
 
-### 1. Data Preparation & Embeddings
-The 20 Newsgroups dataset contains heavy noise (email headers, routing info, signature blocks). I implemented a custom cleaning function to strip these artifacts while explicitly keeping the "Subject" line. 
-* **Justification:** Retaining standard email headers would cause the model to artificially cluster documents by author or university network rather than semantic intent. 
-* **Embedding Model:** I chose `all-MiniLM-L6-v2`. It strikes the ideal balance between deep semantic capture (384-dimensional vectors) and the lightweight, CPU-friendly performance required for a rapid-response caching system.
-* **Vector Store:** I utilized **FAISS** (IndexFlatL2) for persistent, in-memory exact nearest-neighbor search, avoiding the latency and overhead of heavy standalone databases.
-
-### 2. Fuzzy Clustering (Gaussian Mixture Models)
-Documents rarely fit into a single hard category. To achieve soft assignments, I used a Gaussian Mixture Model (GMM).
-* **Cluster Count Justification:** I did not blindly choose 20 clusters. I ran a Bayesian Information Criterion (BIC) analysis across $k=10$ to $k=40$. Using an automated point-to-line distance algorithm to find the point of maximum curvature (the "elbow"), the system mathematically locked in **22 clusters** as the optimal structure.
-* **Boundary Case Uncertainty:** The model successfully identified semantic overlaps. For example, boundary documents discussing the sale of computer hardware showed near-equal probability distributions between "Hardware/Tech" and "Forsale/Classifieds", proving the clusters represent true semantic meaning rather than rigid labels.
-
-### 3. The Custom Semantic Cache
-Instead of an $O(N)$ lookup that degrades as the cache grows, this system leverages the GMM cluster structure to achieve highly scalable efficiency.
-* **Mechanism:** The cache is a dictionary partitioned by cluster IDs. When a new query arrives, it is embedded, its dominant cluster is predicted by the GMM, and its cosine similarity is computed *only* against previously cached queries in that specific cluster. This drops the search space from $O(N)$ to roughly $O(N/k)$.
-* **The Tunable Decision (Threshold = 0.75):** The similarity threshold dictates the cache's strictness. Initial testing at `0.85` resulted in a 0% hit rate for semantically identical but differently worded queries (e.g., "What is the best orbit..." vs "Which orbital path..."). Lowering the threshold to `0.75` allowed the cache to accurately recognize semantic equivalents while remaining strict enough to reject unrelated keyword traps.
-
-### 4. API Endpoints (FastAPI)
-The service manages the cache state in memory and exposes the following endpoints:
-* `POST /query`: Accepts a single query, checks the cache, and computes/stores the result on a miss.
-* `POST /batch_query`: Processes an array of queries in a single request, dynamically caching and retrieving results mid-loop.
-* `GET /cache/stats`: Returns current hit/miss rates and total cache size.
-* `DELETE /cache`: Flushes the cache entirely.
+```
+.
+├── main.py
+├── cache.py
+├── requirements.txt
+├── Dockerfile
+├── README.md
+└── data/
+    ├── corpus_index.faiss
+    ├── corpus_metadata.pkl
+    └── gmm_model.pkl
+```
 
 ---
 
-## Future Improvements for Production
+# Setup & Installation
 
-**Automating the Tunable Decision (Cluster-Adaptive Thresholds)**
-Currently, the cache uses a statically tuned threshold of 0.75. For a fully automated production environment, I would implement Cluster-Adaptive Thresholding. By utilizing the variance metrics already calculated by the Gaussian Mixture Model, the system could dynamically assign stricter similarity thresholds to dense semantic clusters (e.g., Cryptography) and more forgiving thresholds to broad clusters (e.g., General Chat), entirely removing the need for human-tuned magic numbers.
+## Option 1: Docker Deployment (Recommended)
+
+The project includes a Dockerfile for containerized deployment.
+
+### Build the Docker Image
+
+```bash
+docker build -t semantic-cache-api .
+```
+
+### Run the Container
+
+```bash
+docker run -p 8000:8000 semantic-cache-api
+```
+
+### Access the API
+
+Open in browser:
+
+```
+http://localhost:8000/docs
+```
+
+---
+
+## Option 2: Local Python Environment
+
+### Clone the Repository
+
+```bash
+git clone <your-repo-link>
+cd Trademarkia_Project
+```
+
+### Create Virtual Environment
+
+```bash
+python -m venv venv
+```
+
+### Activate Environment
+
+Windows
+
+```bash
+venv\Scripts\activate
+```
+
+Linux / macOS
+
+```bash
+source venv/bin/activate
+```
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run the Server
+
+```bash
+uvicorn main:app --reload
+```
+
+Open:
+
+```
+http://127.0.0.1:8000/docs
+```
+
+---
+
+# API Endpoints
+
+## POST /query
+
+Accepts a single query and checks the semantic cache.
+
+Example request:
+
+```json
+{
+  "query": "What is the best orbit for satellites?"
+}
+```
+
+Example response:
+
+```json
+{
+  "query": "...",
+  "cache_hit": true,
+  "matched_query": "...",
+  "similarity_score": 0.91,
+  "result": "...",
+  "dominant_cluster": 3
+}
+```
+
+---
+
+## POST /batch_query
+
+Processes multiple queries in one request.
+
+Example request:
+
+```json
+{
+  "queries": [
+    "What is the best orbit for satellites?",
+    "Explain geostationary orbit"
+  ]
+}
+```
+
+---
+
+## GET /cache/stats
+
+Returns cache statistics.
+
+Example response:
+
+```json
+{
+  "total_entries": 42,
+  "hit_count": 17,
+  "miss_count": 25,
+  "hit_rate": 0.405
+}
+```
+
+---
+
+## DELETE /cache
+
+Flushes the cache entirely.
+
+---
+
+# Architectural Design & Justifications
+
+## Data Preparation & Embeddings
+
+The **20 Newsgroups dataset** contains noisy artifacts such as:
+
+* email headers
+* routing information
+* signature blocks
+
+A preprocessing step removes these artifacts while retaining the **Subject line**, which carries important semantic information.
+
+### Embedding Model
+
+The system uses:
+
+`all-MiniLM-L6-v2`
+
+Reasons:
+
+* 384 dimensional embeddings
+* strong semantic representation
+* fast inference on CPU
+* lightweight for real-time systems
+
+---
+
+## Vector Database
+
+The project uses **FAISS (IndexFlatL2)** for vector similarity search.
+
+Advantages:
+
+* extremely fast nearest neighbor search
+* lightweight
+* avoids heavy external databases
+* ideal for in-memory semantic retrieval
+
+---
+
+## Fuzzy Clustering (Gaussian Mixture Model)
+
+Documents often belong to multiple semantic categories.
+
+Example:
+
+A document discussing **computer hardware sales** may belong to:
+
+* Hardware
+* Marketplace
+
+To support soft clustering the system uses **Gaussian Mixture Models (GMM)**.
+
+### Cluster Selection
+
+Cluster count was determined using **Bayesian Information Criterion (BIC)** analysis.
+
+Range evaluated:
+
+```
+k = 10 → 40
+```
+
+Using a curvature detection algorithm, the optimal number of clusters was determined to be:
+
+```
+22 clusters
+```
+
+---
+
+## Custom Semantic Cache
+
+Traditional caching fails when queries are phrased differently.
+
+Example:
+
+```
+"What is the best orbit for satellites?"
+"Which orbital path is optimal for satellites?"
+```
+
+The semantic cache solves this problem by comparing query embeddings.
+
+### Cache Mechanism
+
+1. Embed incoming query
+2. Predict dominant cluster via GMM
+3. Search cache entries within that cluster
+4. Compute cosine similarity
+
+This reduces lookup complexity from:
+
+```
+O(N) → O(N/k)
+```
+
+where `k` is the number of clusters.
+
+---
+
+### Tunable Decision: Similarity Threshold
+
+The similarity threshold controls cache strictness.
+
+Initial experiments:
+
+```
+0.85 → Too strict (no cache hits)
+```
+
+Final threshold selected:
+
+```
+0.75
+```
+
+This allows detection of semantically equivalent queries while preventing false matches.
+
+---
+
+# Future Improvements for Production
+
+## Cluster-Adaptive Thresholds
+
+Currently the system uses a static threshold:
+
+```
+threshold = 0.75
+```
+
+In a production system this could be replaced with **cluster-adaptive thresholds**.
+
+Using variance metrics from the Gaussian Mixture Model:
+
+* dense clusters → stricter similarity thresholds
+* broad clusters → relaxed thresholds
+
+This removes manual tuning and enables automatic optimization.
+
+---
+
+# Technologies Used
+
+* Python
+* FastAPI
+* SentenceTransformers
+* FAISS
+* Scikit-learn
+* NumPy
+* Docker
+
+---
+
+# Running the Project
+
+Local execution:
+
+```bash
+uvicorn main:app --reload
+```
+
+Docker execution:
+
+```bash
+docker build -t semantic-cache-api .
+docker run -p 8000:8000 semantic-cache-api
+```
+
+---
+
+# Author
+
+Ranjith K
