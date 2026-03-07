@@ -1,6 +1,4 @@
-Below is your **entire README content in pure Markdown input format** (no extra formatting blocks), ready to paste directly into a `README.md` file in your repository.
 
----
 
 # Trademarkia AI/ML Engineer Task: Semantic Search Cache
 
